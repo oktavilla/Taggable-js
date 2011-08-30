@@ -57,6 +57,7 @@ class Taggable
     @field.keypress (event) => this.keypress_checker(event)
     @field.blur (event) => this.add_tag()
     @container.delegate('a', 'click', (event) =>
+      event.preventDefault()
       tag_id = $(event.currentTarget).parent('span').attr('id')
       this.remove_tag(tag_id)
     )

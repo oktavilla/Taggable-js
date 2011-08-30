@@ -56,6 +56,7 @@
       }, this));
       return this.container.delegate('a', 'click', __bind(function(event) {
         var tag_id;
+        event.preventDefault();
         tag_id = $(event.currentTarget).parent('span').attr('id');
         return this.remove_tag(tag_id);
       }, this));
