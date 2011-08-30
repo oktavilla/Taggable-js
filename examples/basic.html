@@ -9,6 +9,51 @@
       $('textarea').taggable()
     });
   </script>
+  <style type="text/css">
+    body {
+      font-size: 14px;
+      font-family: Helvetica, arial, sans-serif;
+      color: #333;
+    }
+    .tag {
+      border: 1px solid #ddd;
+      background: #eee;
+      background: -webkit-gradient(linear, left top, left bottom, from(#eee), to(#ddd));
+      background: -moz-linear-gradient(top,  #eee,  #ddd);
+      -webkit-border-radius: 10px;
+      -moz-border-radius: 10px;
+      border-radius: 10px;
+      padding: 2px 8px 4px 30px;
+      margin: -3px 5px 8px 0;
+      display: inline-block;
+      position: relative; }
+    .tag a {
+      color: #999;
+      text-decoration: none;
+      position: absolute;
+      left: 0;
+      top: 0;
+      padding: 1px 4px 4px 7px;
+      border-right: 1px solid #fff; }
+    .tag.focused {
+      background: #eb3535;
+      background: -webkit-gradient(linear, left top, left bottom, from(#eb3535), to(#c12c2c));
+      background: -moz-linear-gradient(top,  #eb3535,  #c12c2c);
+      border-color: #a62121;
+      color: #fff; }
+    .tag.focused a {
+      color: #fff;
+      border-color: #a62121; }
+    .tag a:hover,
+    .tag a:focus {
+      color: #ff0000; }
+    textarea {
+      padding: 10px 7px;
+      border: 1px solid #ddd;
+      line-height: 1;
+      width: 400px;
+      font-size: 14px; }
+  </style>
 </head>
 <body>
   <form action="#">
