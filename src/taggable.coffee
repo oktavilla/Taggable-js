@@ -1,18 +1,26 @@
 root = this
 $ = jQuery
 $.fn.extend({
-  taggable: (data, options) ->
+  taggable: (options) ->
     $(this).each((input_field) ->
-      new Taggable(this, data, options)
+      new Taggable(this, options)
     )
 })
 
 class Taggable
-  constructor: (field) ->
+  constructor: (field, options = {}) ->
+    @options = $.extend {
+      onChange: ->
+    }, options
     @_id = this.generate_random_id()
     @_tags = []
-    @field = $ field
-    @delimiter = @field.data 'delimiter'
+    @original = $(field).css({
+      position: 'absolute'
+      left: '-100000px',
+      top: '0px',
+      visibility: 'hidden'
+    })
+    @delimiter = @original.data 'delimiter'
     this.setup()
     this.setup_observers()
 
@@ -25,68 +33,84 @@ class Taggable
       'line-height',
       'text-transform',
       'letter-spacing',
-      'padding-top',
-      'padding-right',
-      'padding-bottom',
-      'padding-left'
+      'box-sizing'
     ]
 
-    border_top  = parseInt @field.css('borderTopWidth'), 10
-    border_left = parseInt @field.css('borderLeftWidth'), 10
-
-    computed_styles = {
-      position: 'absolute',
-      top: @field.offset().top + border_top,
-      left: @field.offset().left + border_left,
-      'max-width': "#{@field.width()}px",
-      'box-sizing': 'content-box'
-    }
+    computed_styles = {}
 
     for style in styles
-      computed_styles[style] = @field.css(style)
+      computed_styles[style] = @original.css(style)
 
-    @container = ($ '<div />', {
+    @target = ($ '<input />',
+      type:  'hidden',
+      name:  @original.attr('name'),
+      value: @original.val()
+    )
+    @target.insertBefore @original
+
+    @container = ($ '<div />',
       id: @_id,
       class: "taggable_container"
-    }).css(computed_styles)
-    @container.appendTo 'body'
+    ).css
+      'max-width':  "#{@original.width()}px",
+      'min-height': "#{@original.height()}px",
+      position: 'relative'
+
+    @input = ($ '<input />',
+      type: 'text',
+      name: 'taggable',
+      autocomplete: 'off'
+    ).css(computed_styles).css(
+      width: "#{@original.width()}px",
+      background: 'transparent',
+      position: 'absolute',
+      top: @container.css('paddingTop'),
+      left: @container.css('paddingLeft'),
+      border: 'none',
+      outline: 'none'
+    ).appendTo @container
+
+    @container.insertAfter @original
+    @original.hide
 
   setup_observers: ->
-    @field.keydown (event) => this.keydown_checker(event)
-    @field.keyup (event) => this.keyup_checker(event)
-    @field.keypress (event) => this.keypress_checker(event)
-    @field.blur (event) => this.add_tag()
+    @input.keydown (event) => this.keydown_checker(event)
+    @input.keyup (event) => this.keyup_checker(event)
+    @input.keypress (event) => this.keypress_checker(event)
+    @input.blur (event) => this.add_tag()
     @container.delegate('a', 'click', (event) =>
       event.preventDefault()
       tag_id = $(event.currentTarget).parent('span').attr('id')
-      this.remove_tag(tag_id)
-    )
+      matched_tags = @_tags.filter (tag) -> tag.id == tag_id
+      if matched_tags.length > 0
+        this.remove_tag(matched_tags[0])
+    ).bind 'click', =>
+      @input.focus()
 
   scale: ->
     if @_tags.length > 0
-      tag      = this.last_tag()
-      position = tag.position()
-      left     = position.left + tag.outerWidth() + parseInt(tag.css('margin-right'), 10)
+      tag_element = this.last_tag().element()
+      position = tag_element.position()
+      left     = position.left + tag_element.outerWidth() + parseInt(tag_element.css('margin-right'), 10)
       top      = position.top
 
-      if left >= @field.innerWidth() - 20
-        left = parseInt @container.css('padding-left'), 10
-        top += tag.outerHeight()
+      if left >= (@container.innerWidth() - 30)
+        left = parseInt(@container.css('paddingLeft'), 10)
+        top += tag_element.outerHeight() + parseInt(tag_element.css('marginBottom'), 10)
 
     else
-      top  = parseInt @container.css('padding-top'), 10
-      left = parseInt @container.css('padding-left'), 10
+      top  = 0
+      left = 0
 
-    @field.css({
-      'padding-top': "#{top}px",
-      'padding-left': "#{left}px"
-    })
+    @input.css
+      top: "#{top}px",
+      left: "#{left}px"
 
   keydown_checker: (event) ->
     stroke = event.which ? event.keyCode
     switch stroke
       when 8
-        @backstroke_length = @field.val().length
+        @backstroke_length = @input.val().length
         break
       when 9
         break
@@ -99,6 +123,14 @@ class Taggable
         break
       when 40
         break
+      else
+        # Make the thing get bigger! But with real code.
+        # if @input.position().left > (@container.width() - parseInt(@container.css('paddingRight'), 10))
+        #   added_height = @input.position().top + this.last_tag().element().outerHeight()
+        #   container.css
+        #     'min-height': @container.innerHeight() + added_height
+        #   @input.css
+        #     top: "#{added_height}px"
 
   keyup_checker: (event) ->
     stroke = event.which ? event.keyCode
@@ -109,8 +141,8 @@ class Taggable
           this.backstroke()
       else
         if @delimiter_inserted
-          value = @field.val().replace(new RegExp(@delimiter, 'g'), '')
-          @field.val(value)
+          value = @input.val().replace(new RegExp(@delimiter, 'g'), '')
+          @input.val(value)
           if value != ''
             this.add_tag()
 
@@ -124,38 +156,52 @@ class Taggable
   backstroke: ->
     if @pending_removal
       this.clear_backstroke()
-      this.pop_tag()
+      this.remove_tag @_tags[@_tags.length - 1]
     else
       @pending_removal = true
-      this.last_tag().addClass('focused')
+      this.last_tag().element().addClass 'focused'
 
   clear_backstroke: ->
-    this.last_tag().removeClass('focused')
+    if last_tag = this.last_tag()
+      last_tag.element().removeClass 'focused'
     @pending_removal = null
 
   add_tag: ->
-    value = @field.val()
-    if value != ''
-      tag = $('<span />', {
+    value = @input.val()
+    if value isnt ''
+      tag =
+        id: "#{@_id}_tag_#{@_tags.length}",
+        value: value,
+        element: ->
+          $ "##{this.id}"
+
+      @_tags.push tag
+
+      @container.append $('<span />', {
         class: 'tag',
-        id: "#{@_id}_tag_#{@_tags.length}"
-      }).text(value).append($('<a href="#">x</a>'))
-      @container.append tag
-      @_tags.push tag.attr('id')
-      @field.val ''
+        id: tag.id
+      }).text(value).append $('<a href="#">x</a>')
+
+      @input.val ''
+
       this.scale()
+      @input.focus()
+      this.write()
 
-  remove_tag: (id) ->
-    @_tags.splice @_tags.indexOf(id), 1
-    $("##{id}").remove()
+      this.options.onChange.call this
+
+  remove_tag: (tag) ->
+    @_tags.splice @_tags.indexOf(tag), 1
+    $("##{tag.id}").remove()
     this.scale()
-
-  pop_tag: ->
-    id = @_tags[@_tags.length - 1]
-    this.remove_tag id
+    this.write()
+    this.options.onChange.call this
 
   last_tag: ->
-    $("##{@_tags[@_tags.length-1]}")
+    @_tags[@_tags.length-1]
+
+  write: ->
+    @target.val (tag.value for tag in @_tags).join(@delimiter)
 
   generate_random_id: ->
     string = "sel" + this.generate_random_char() + this.generate_random_char() + this.generate_random_char()

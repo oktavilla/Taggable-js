@@ -6,7 +6,11 @@
   <script src="../taggable-js/taggable.js" type="text/javascript"></script>
   <script type="text/javascript">
     $(document).ready(function() {
-      $('textarea').taggable()
+      $('textarea.taggable').taggable({
+        onChange: function() {
+          $('#output').val(this.target.val());
+        }
+      });
     });
   </script>
   <style type="text/css">
@@ -22,9 +26,9 @@
       background: -moz-linear-gradient(top,  #eee,  #ddd);
       -webkit-border-radius: 10px;
       -moz-border-radius: 10px;
-      border-radius: 10px;
-      padding: 2px 8px 4px 30px;
-      margin: -3px 5px 8px 0;
+      border-radius: 4px;
+      padding: 2px 8px 4px 26px;
+      margin: 0 5px 8px 0;
       display: inline-block;
       position: relative; }
     .tag a {
@@ -33,7 +37,7 @@
       position: absolute;
       left: 0;
       top: 0;
-      padding: 1px 4px 4px 7px;
+      padding: 1px 5px 4px 7px;
       border-right: 1px solid #fff; }
     .tag.focused {
       background: #eb3535;
@@ -47,7 +51,8 @@
     .tag a:hover,
     .tag a:focus {
       color: #ff0000; }
-    textarea {
+    textarea,
+    .taggable_container {
       padding: 10px 7px;
       border: 1px solid #ddd;
       line-height: 1;
@@ -57,7 +62,8 @@
 </head>
 <body>
   <form action="#">
-    <textarea type="text" data-delimiter="," cols="40" rows="4"></textarea>
+    <textarea type="text" class="taggable" data-delimiter="," cols="40" rows="4"></textarea>
+    <textarea id="output" cols="40" rows="4"></textarea>
   </form>
 </body>
 </html>
