@@ -112,7 +112,6 @@
         outline: 'none'
       }).appendTo(this.container);
       this.container.insertAfter(this.original);
-      this.original.hide;
       existing_tags_string = $.trim(this.original.val());
       if (existing_tags_string !== '') {
         return $.each(existing_tags_string.split(this.options.delimiter), __bind(function(index, tag) {

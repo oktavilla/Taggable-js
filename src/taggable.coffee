@@ -107,7 +107,6 @@ class Taggable
     ).appendTo @container
 
     @container.insertAfter @original
-    @original.hide
 
     existing_tags_string = $.trim @original.val()
     unless existing_tags_string == ''
