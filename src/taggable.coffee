@@ -1,30 +1,73 @@
 root = this
 $ = jQuery
-$.fn.extend({
-  taggable: (options) ->
-    $(this).each((input_field) ->
-      new Taggable(this, options)
-    )
-})
+
+$.taggable =
+  instances: new Array(),
+  destroyAll: ->
+    $.each $.taggable.instances, (i, element) ->
+      element.taggable 'destroy'
+
+methods =
+  init: (options) ->
+    settings =
+      delimiter: ','
+      string_wrap: null
+
+    settings = $.extend settings, options
+
+    return @each () ->
+      element = $ this;
+      taggable = element.data('taggable');
+      if not taggable
+        element.data 'taggable', new Taggable(element, settings)
+        $.taggable.instances.push(element);
+
+  destroy: ->
+    return @each () ->
+      element = $ this;
+      taggable = element.data('taggable');
+      instances = $.taggable.instances.map (thing) ->
+        thing.get(0)
+      index = $.inArray this, instances
+      if index != -1
+        taggable.destroy()
+        delete $.taggable.instances[index];
+        delete taggable;
+        element.removeData('taggable');
+
+$.fn.taggable = (method, options...) ->
+  if typeof methods[method] == 'function'
+    methods[method].apply this, options
+  else if typeof method == 'object' or not method?
+    methods.init.apply(this, arguments);
+  else
+    $.error('Method ' +  method + ' does not exist on jQuery.taggable');
 
 class Taggable
-  constructor: (field, options = {}) ->
+  constructor: (field, options) ->
+    @original = $ field
     @options = $.extend {
+      delimiter: @original.data('delimiter') || ','
       onChange: ->
-    }, options
+    }, options || {}
     @_id = this.generate_random_id()
     @_tags = []
-    @original = $(field).css({
-      position: 'absolute'
-      left: '-100000px',
-      top: '0px',
-      visibility: 'hidden'
-    })
-    @delimiter = @original.data 'delimiter'
     this.setup()
     this.setup_observers()
 
   setup: ->
+    @original.data 'original-position',
+      position: @original.css('position')
+      left: @original.css('left')
+      top: @original.css('top')
+      visibility:  @original.css('visibility')
+
+    @original.css
+      position: 'absolute'
+      left: '-100000px'
+      top: '0px'
+      visibility: 'hidden'
+
     styles = [
       'font-size',
       'font-style',
@@ -41,50 +84,50 @@ class Taggable
     for style in styles
       computed_styles[style] = @original.css(style)
 
-    @target = ($ '<input />',
-      type:  'hidden',
-      name:  @original.attr('name'),
-      value: @original.val()
-    )
-    @target.insertBefore @original
-
     @container = ($ '<div />',
-      id: @_id,
+      id: @_id
       class: "taggable_container"
     ).css
-      'max-width':  "#{@original.width()}px",
-      'min-height': "#{@original.height()}px",
+      'max-width':  "#{@original.width()}px"
+      'min-height': "#{@original.height()}px"
       position: 'relative'
 
     @input = ($ '<input />',
-      type: 'text',
-      name: 'taggable',
+      type: 'text'
+      name: 'taggable'
       autocomplete: 'off'
     ).css(computed_styles).css(
-      width: "#{@original.width()}px",
-      background: 'transparent',
-      position: 'absolute',
-      top: @container.css('paddingTop'),
-      left: @container.css('paddingLeft'),
-      border: 'none',
+      width: "#{@original.width()}px"
+      background: 'transparent'
+      position: 'absolute'
+      top: @container.css('paddingTop')
+      left: @container.css('paddingLeft')
+      border: 'none'
       outline: 'none'
     ).appendTo @container
 
     @container.insertAfter @original
     @original.hide
 
+    existing_tags_string = $.trim @original.val()
+    unless existing_tags_string == ''
+      $.each existing_tags_string.split(@options.delimiter), (index, tag) =>
+        this.add_tag tag
+
+
   setup_observers: ->
     @input.keydown (event) => this.keydown_checker(event)
     @input.keyup (event) => this.keyup_checker(event)
     @input.keypress (event) => this.keypress_checker(event)
-    @input.blur (event) => this.add_tag()
-    @container.delegate('a', 'click', (event) =>
+    @input.blur (event) => this.add_tag @input.val()
+    @container.delegate('a', 'click.taggable', (event) =>
       event.preventDefault()
       tag_id = $(event.currentTarget).parent('span').attr('id')
       matched_tags = @_tags.filter (tag) -> tag.id == tag_id
       if matched_tags.length > 0
         this.remove_tag(matched_tags[0])
-    ).bind 'click', =>
+    ).bind 'click.taggable', (event) =>
+      event.preventDefault()
       @input.focus()
 
   scale: ->
@@ -116,7 +159,7 @@ class Taggable
         break
       when 13, 27
         event.preventDefault()
-        this.add_tag()
+        this.add_tag @input.val()
         break
       when 38
         event.preventDefault()
@@ -124,13 +167,28 @@ class Taggable
       when 40
         break
       else
-        # Make the thing get bigger! But with real code.
-        # if @input.position().left > (@container.width() - parseInt(@container.css('paddingRight'), 10))
-        #   added_height = @input.position().top + this.last_tag().element().outerHeight()
-        #   container.css
-        #     'min-height': @container.innerHeight() + added_height
-        #   @input.css
-        #     top: "#{added_height}px"
+        available_width = this.available_width()
+        if @_tags.length != 0
+          tmp_tag = $('<span />', {
+            class: 'tag'
+          }).css(
+            visibility: 'hidden',
+            position: 'absolute',
+            left: '-100000px'
+          ).text(@input.val()).append $('<a href="#">x</a>')
+          tmp_tag.appendTo(@container)
+          width = tmp_tag.outerWidth()
+          if width >= available_width
+            added_height = @input.position().top + tmp_tag.outerHeight()
+            @container.css
+              'height': @container.innerHeight() + added_height
+            @input.css
+              left: @container.css('paddingLeft'),
+              top: "#{added_height}px"
+          else
+            @input.css
+              width: "#{available_width}px"
+          tmp_tag.remove()
 
   keyup_checker: (event) ->
     stroke = event.which ? event.keyCode
@@ -140,17 +198,17 @@ class Taggable
         if @backstroke_length < 1 and @_tags.length > 0
           this.backstroke()
       else
-        if @delimiter_inserted
-          value = @input.val().replace(new RegExp(@delimiter, 'g'), '')
+        if @options.delimiter_inserted
+          value = @input.val().replace(new RegExp(@options.delimiter, 'g'), '')
           @input.val(value)
           if value != ''
-            this.add_tag()
+            this.add_tag @input.val()
 
   keypress_checker: (event) ->
-    if String.fromCharCode(event.charCode) == @delimiter
-      @delimiter_inserted = true
+    if String.fromCharCode(event.charCode) == @options.delimiter
+      @options.delimiter_inserted = true
     else
-      @delimiter_inserted = false
+      @options.delimiter_inserted = false
     true
 
   backstroke: ->
@@ -166,8 +224,7 @@ class Taggable
       last_tag.element().removeClass 'focused'
     @pending_removal = null
 
-  add_tag: ->
-    value = @input.val()
+  add_tag: (value) ->
     if value isnt ''
       tag =
         id: "#{@_id}_tag_#{@_tags.length}",
@@ -201,7 +258,19 @@ class Taggable
     @_tags[@_tags.length-1]
 
   write: ->
-    @target.val (tag.value for tag in @_tags).join(@delimiter)
+    @original.val (tag.value for tag in @_tags).join(@options.delimiter)
+
+  destroy: ->
+    this.write()
+    @container.remove()
+    @original.css @original.data('original-position')
+
+  available_width: ->
+    if @_tags.length > 0
+      last_tag_element = this.last_tag().element()
+      @container.innerWidth() - (@input.position().left + last_tag_element.outerWidth())
+    else
+      @container.innerWidth()
 
   generate_random_id: ->
     string = "sel" + this.generate_random_char() + this.generate_random_char() + this.generate_random_char()

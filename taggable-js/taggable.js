@@ -1,49 +1,95 @@
 (function() {
-  var $, Taggable, root;
-  var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
+  var $, Taggable, methods, root;
+  var __slice = Array.prototype.slice, __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
   root = this;
   $ = jQuery;
-  $.fn.extend({
-    taggable: function(options) {
-      return $(this).each(function(input_field) {
-        return new Taggable(this, options);
+  $.taggable = {
+    instances: new Array(),
+    destroyAll: function() {
+      return $.each($.taggable.instances, function(i, element) {
+        return element.taggable('destroy');
       });
     }
-  });
+  };
+  methods = {
+    init: function(options) {
+      var settings;
+      settings = {
+        delimiter: ',',
+        string_wrap: null
+      };
+      settings = $.extend(settings, options);
+      return this.each(function() {
+        var element, taggable;
+        element = $(this);
+        taggable = element.data('taggable');
+        if (!taggable) {
+          element.data('taggable', new Taggable(element, settings));
+          return $.taggable.instances.push(element);
+        }
+      });
+    },
+    destroy: function() {
+      return this.each(function() {
+        var element, index, instances, taggable;
+        element = $(this);
+        taggable = element.data('taggable');
+        instances = $.taggable.instances.map(function(thing) {
+          return thing.get(0);
+        });
+        index = $.inArray(this, instances);
+        if (index !== -1) {
+          taggable.destroy();
+          delete $.taggable.instances[index];
+          delete taggable;
+          return element.removeData('taggable');
+        }
+      });
+    }
+  };
+  $.fn.taggable = function() {
+    var method, options;
+    method = arguments[0], options = 2 <= arguments.length ? __slice.call(arguments, 1) : [];
+    if (typeof methods[method] === 'function') {
+      return methods[method].apply(this, options);
+    } else if (typeof method === 'object' || !(method != null)) {
+      return methods.init.apply(this, arguments);
+    } else {
+      return $.error('Method ' + method + ' does not exist on jQuery.taggable');
+    }
+  };
   Taggable = (function() {
     function Taggable(field, options) {
-      if (options == null) {
-        options = {};
-      }
+      this.original = $(field);
       this.options = $.extend({
+        delimiter: this.original.data('delimiter') || ',',
         onChange: function() {}
-      }, options);
+      }, options || {});
       this._id = this.generate_random_id();
       this._tags = [];
-      this.original = $(field).css({
+      this.setup();
+      this.setup_observers();
+    }
+    Taggable.prototype.setup = function() {
+      var computed_styles, existing_tags_string, style, styles, _i, _len;
+      this.original.data('original-position', {
+        position: this.original.css('position'),
+        left: this.original.css('left'),
+        top: this.original.css('top'),
+        visibility: this.original.css('visibility')
+      });
+      this.original.css({
         position: 'absolute',
         left: '-100000px',
         top: '0px',
         visibility: 'hidden'
       });
-      this.delimiter = this.original.data('delimiter');
-      this.setup();
-      this.setup_observers();
-    }
-    Taggable.prototype.setup = function() {
-      var computed_styles, style, styles, _i, _len;
       styles = ['font-size', 'font-style', 'font-weight', 'font-family', 'line-height', 'text-transform', 'letter-spacing', 'box-sizing'];
       computed_styles = {};
       for (_i = 0, _len = styles.length; _i < _len; _i++) {
         style = styles[_i];
         computed_styles[style] = this.original.css(style);
       }
-      this.target = $('<input />', {
-        type: 'hidden',
-        name: this.original.attr('name'),
-        value: this.original.val()
-      });
-      this.target.insertBefore(this.original);
       this.container = ($('<div />', {
         id: this._id,
         "class": "taggable_container"
@@ -66,7 +112,13 @@
         outline: 'none'
       }).appendTo(this.container);
       this.container.insertAfter(this.original);
-      return this.original.hide;
+      this.original.hide;
+      existing_tags_string = $.trim(this.original.val());
+      if (existing_tags_string !== '') {
+        return $.each(existing_tags_string.split(this.options.delimiter), __bind(function(index, tag) {
+          return this.add_tag(tag);
+        }, this));
+      }
     };
     Taggable.prototype.setup_observers = function() {
       this.input.keydown(__bind(function(event) {
@@ -79,9 +131,9 @@
         return this.keypress_checker(event);
       }, this));
       this.input.blur(__bind(function(event) {
-        return this.add_tag();
+        return this.add_tag(this.input.val());
       }, this));
-      return this.container.delegate('a', 'click', __bind(function(event) {
+      return this.container.delegate('a', 'click.taggable', __bind(function(event) {
         var matched_tags, tag_id;
         event.preventDefault();
         tag_id = $(event.currentTarget).parent('span').attr('id');
@@ -91,7 +143,8 @@
         if (matched_tags.length > 0) {
           return this.remove_tag(matched_tags[0]);
         }
-      }, this)).bind('click', __bind(function() {
+      }, this)).bind('click.taggable', __bind(function(event) {
+        event.preventDefault();
         return this.input.focus();
       }, this));
     };
@@ -116,7 +169,7 @@
       });
     };
     Taggable.prototype.keydown_checker = function(event) {
-      var stroke, _ref;
+      var added_height, available_width, stroke, tmp_tag, width, _ref;
       stroke = (_ref = event.which) != null ? _ref : event.keyCode;
       switch (stroke) {
         case 8:
@@ -127,13 +180,41 @@
         case 13:
         case 27:
           event.preventDefault();
-          this.add_tag();
+          this.add_tag(this.input.val());
           break;
         case 38:
           event.preventDefault();
           break;
         case 40:
           break;
+        default:
+          available_width = this.available_width();
+          if (this._tags.length !== 0) {
+            tmp_tag = $('<span />', {
+              "class": 'tag'
+            }).css({
+              visibility: 'hidden',
+              position: 'absolute',
+              left: '-100000px'
+            }).text(this.input.val()).append($('<a href="#">x</a>'));
+            tmp_tag.appendTo(this.container);
+            width = tmp_tag.outerWidth();
+            if (width >= available_width) {
+              added_height = this.input.position().top + tmp_tag.outerHeight();
+              this.container.css({
+                'height': this.container.innerHeight() + added_height
+              });
+              this.input.css({
+                left: this.container.css('paddingLeft'),
+                top: "" + added_height + "px"
+              });
+            } else {
+              this.input.css({
+                width: "" + available_width + "px"
+              });
+            }
+            return tmp_tag.remove();
+          }
       }
     };
     Taggable.prototype.keyup_checker = function(event) {
@@ -149,20 +230,20 @@
           }
           break;
         default:
-          if (this.delimiter_inserted) {
-            value = this.input.val().replace(new RegExp(this.delimiter, 'g'), '');
+          if (this.options.delimiter_inserted) {
+            value = this.input.val().replace(new RegExp(this.options.delimiter, 'g'), '');
             this.input.val(value);
             if (value !== '') {
-              return this.add_tag();
+              return this.add_tag(this.input.val());
             }
           }
       }
     };
     Taggable.prototype.keypress_checker = function(event) {
-      if (String.fromCharCode(event.charCode) === this.delimiter) {
-        this.delimiter_inserted = true;
+      if (String.fromCharCode(event.charCode) === this.options.delimiter) {
+        this.options.delimiter_inserted = true;
       } else {
-        this.delimiter_inserted = false;
+        this.options.delimiter_inserted = false;
       }
       return true;
     };
@@ -182,9 +263,8 @@
       }
       return this.pending_removal = null;
     };
-    Taggable.prototype.add_tag = function() {
-      var tag, value;
-      value = this.input.val();
+    Taggable.prototype.add_tag = function(value) {
+      var tag;
       if (value !== '') {
         tag = {
           id: "" + this._id + "_tag_" + this._tags.length,
@@ -217,7 +297,7 @@
     };
     Taggable.prototype.write = function() {
       var tag;
-      return this.target.val(((function() {
+      return this.original.val(((function() {
         var _i, _len, _ref, _results;
         _ref = this._tags;
         _results = [];
@@ -226,7 +306,21 @@
           _results.push(tag.value);
         }
         return _results;
-      }).call(this)).join(this.delimiter));
+      }).call(this)).join(this.options.delimiter));
+    };
+    Taggable.prototype.destroy = function() {
+      this.write();
+      this.container.remove();
+      return this.original.css(this.original.data('original-position'));
+    };
+    Taggable.prototype.available_width = function() {
+      var last_tag_element;
+      if (this._tags.length > 0) {
+        last_tag_element = this.last_tag().element();
+        return this.container.innerWidth() - (this.input.position().left + last_tag_element.outerWidth());
+      } else {
+        return this.container.innerWidth();
+      }
     };
     Taggable.prototype.generate_random_id = function() {
       var string;

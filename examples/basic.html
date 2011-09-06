@@ -8,8 +8,16 @@
     $(document).ready(function() {
       $('textarea.taggable').taggable({
         onChange: function() {
-          $('#output').val(this.target.val());
+          $('#output').val(this.original.val());
         }
+      });
+      $('#setup').click(function(event) {
+        event.preventDefault();
+        $('#tearme').taggable();
+      });
+      $('#teardown').click(function(event) {
+        event.preventDefault();
+        $('#tearme').taggable('destroy');
       });
     });
   </script>
@@ -58,12 +66,35 @@
       line-height: 1;
       width: 400px;
       font-size: 14px; }
+    .example {
+      float:left;
+      margin:0 20px 20px 0; }
+    #output_container {
+      margin-top:50px;
+      display:block;
+      clear:left;}
   </style>
 </head>
 <body>
   <form action="#">
-    <textarea type="text" class="taggable" data-delimiter="," cols="40" rows="4"></textarea>
-    <textarea id="output" cols="40" rows="4"></textarea>
+    <div class="example">
+      <h2>Basic</h2>
+      <textarea type="text" class="taggable" data-delimiter="," cols="40" rows="4"></textarea>
+    </div>
+    <div class="example">
+      <h2>With values</h2>
+      <textarea type="text" class="taggable" data-delimiter="," cols="40" rows="4">Tag1,Tag2,Tag3</textarea>
+    </div>
+    <div class="example">
+      <h2>Teardown</h2>
+      <textarea type="text" id="tearme" class="taggable" data-delimiter="," cols="40" rows="4">Tag1</textarea>
+      <button id="setup">Setup</button>
+      <button id="teardown">Teardown</button>
+    </div>
+    <div id="output_container">
+      <h2>Output</h2>
+      <textarea id="output" cols="40" rows="4"></textarea>
+    </div>
   </form>
 </body>
 </html>
